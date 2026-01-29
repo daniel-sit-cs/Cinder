@@ -1,0 +1,38 @@
+# Environment variables
+.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Model checkpoints (too large for git)
+ckpt/
+*.bin
+*.safetensors
+*.pth
+*.pt
+
+# Generated outputs
+outputs/
+generated_stories/
+temp/
+*.mp4
+*.wav
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

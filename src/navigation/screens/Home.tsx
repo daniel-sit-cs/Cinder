@@ -1,11 +1,15 @@
 // src/navigation/screens/Home.tsx
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useNavigation } from '@react-navigation/native'; // <--- Import the hook
 import { signOut } from 'firebase/auth';
 import { auth } from '../../firebaseConfig';
 import { CinderOrange } from '../../theme/color';
 
-export function Home({ navigation }: any) {
+export function Home() {
+  // FIX: Grab the navigation object directly using the hook
+  const navigation = useNavigation<any>(); 
+
   const handleLogout = async () => {
     try {
       await signOut(auth);
