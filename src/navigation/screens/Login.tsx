@@ -19,7 +19,7 @@ export function Login() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Cinder</Text>
+      <Text style={styles.title}>CinderAI</Text>
       <TextInput 
         placeholder="Email" 
         value={email} 
