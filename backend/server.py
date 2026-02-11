@@ -29,7 +29,9 @@ from gtts import gTTS
 # ============================================================================
 
 MOCK_MODE = False 
-# HF_TOKEN = "" 
+from dotenv import load_dotenv
+load_dotenv()
+HF_TOKEN = os.getenv("HF_TOKEN")
 client = InferenceClient(token=HF_TOKEN)
 
 # ============================================================================
