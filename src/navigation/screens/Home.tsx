@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  View, Text, TouchableOpacity, StyleSheet, ScrollView, Image, TextInput, SafeAreaView, Dimensions
+  View, Text, TouchableOpacity, StyleSheet, ScrollView, Image, TextInput, SafeAreaView, Alert
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { 
@@ -8,23 +8,67 @@ import {
   Settings, Bell, HelpCircle, LogOut, Crown, ChevronRight 
 } from 'lucide-react-native';
 
-// --- MOCK DATA ---
-const RECENT_PROJECTS = [
-  { id: 1, title: 'The Cyberpunk Fox', date: '2h ago', image: 'https://via.placeholder.com/150/FF4500/FFFFFF?text=Fox' },
-  { id: 2, title: 'Neon City', date: '5h ago', image: 'https://via.placeholder.com/150/000000/FFFFFF?text=City' },
-  { id: 3, title: 'Ancient Ruins', date: '1d ago', image: 'https://via.placeholder.com/150/333/FFFFFF?text=Ruins' },
-];
+// Firebase Imports
+import { db, auth } from '../../firebaseConfig';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
 
 export function Home() {
   const navigation = useNavigation<any>();
-  const [activeTab, setActiveTab] = useState('home'); // 'home' | 'library' | 'profile'
+  const [activeTab, setActiveTab] = useState('home'); 
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // State for real projects
+  const [projects, setProjects] = useState<any[]>([]);
+
+  // Current User Data
+  const user = auth.currentUser;
+  const displayName = user?.displayName || user?.email?.split('@')[0] || 'Creator';
+  const email = user?.email || '';
+
+  // Fetch from Firebase
+  useEffect(() => {
+    const fetchProjects = async () => {
+      if (!user) return;
+      try {
+        const q = query(collection(db, 'projects'), where('userId', '==', user.uid));
+        const querySnapshot = await getDocs(q);
+        
+        const fetchedProjects = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        
+        // Sort by newest first
+        fetchedProjects.sort((a: any, b: any) => b.createdAt - a.createdAt);
+        setProjects(fetchedProjects);
+      } catch (error) {
+        console.error("Error fetching projects:", error);
+      }
+    };
+
+    // Refetch whenever the tab changes so it's always up to date
+    fetchProjects();
+  }, [activeTab, user]);
+
+  // --- ACTIONS ---
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Logout Error:", error);
+    }
+  };
+
+  const handleComingSoon = (feature: string) => {
+    Alert.alert("Coming Soon", `${feature} will be available in the next update!`);
+  };
 
   // --- VIEW 1: DASHBOARD ---
   const renderHome = () => (
     <ScrollView contentContainerStyle={styles.scrollContent}>
       <View style={styles.header}>
-        <Text style={styles.greeting}>Welcome back, User</Text>
+        <Text style={styles.greeting}>Welcome back, {displayName}</Text>
         <Text style={styles.subGreeting}>Ready to create something amazing?</Text>
       </View>
 
@@ -48,18 +92,23 @@ export function Home() {
         </View>
 
         <View style={styles.projectList}>
-          {RECENT_PROJECTS.slice(0, 2).map((project) => (
-            <TouchableOpacity key={project.id} style={styles.projectCard}>
-              <Image source={{ uri: project.image }} style={styles.projectImage} />
-              <View style={styles.projectInfo}>
-                <Text style={styles.projectTitle}>{project.title}</Text>
-                <View style={styles.metaRow}>
-                  <Clock size={12} color="#666" />
-                  <Text style={styles.projectDate}>{project.date}</Text>
+          {projects.length === 0 ? (
+            <Text style={{color: '#9CA3AF', marginTop: 10}}>No stories yet. Click above to start!</Text>
+          ) : (
+            projects.slice(0, 3).map((project) => (
+              <TouchableOpacity key={project.id} style={styles.projectCard}>
+                {/* Dynamically grab the first frame of the story for the thumbnail */}
+                <Image source={{ uri: project.frames?.[0]?.imageUrl }} style={styles.projectImage} />
+                <View style={styles.projectInfo}>
+                  <Text style={styles.projectTitle} numberOfLines={1}>{project.title}</Text>
+                  <View style={styles.metaRow}>
+                    <Clock size={12} color="#666" />
+                    <Text style={styles.projectDate}>{project.date}</Text>
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))}
+              </TouchableOpacity>
+            ))
+          )}
         </View>
       </View>
     </ScrollView>
@@ -67,7 +116,7 @@ export function Home() {
 
   // --- VIEW 2: LIBRARY ---
   const renderLibrary = () => {
-    const filtered = RECENT_PROJECTS.filter(p => p.title.toLowerCase().includes(searchQuery.toLowerCase()));
+    const filtered = projects.filter(p => p.title?.toLowerCase().includes(searchQuery.toLowerCase()));
     return (
       <View style={{flex: 1}}>
         <View style={styles.header}>
@@ -93,7 +142,7 @@ export function Home() {
              <View style={styles.grid}>
                {filtered.map((project) => (
                  <TouchableOpacity key={project.id} style={styles.gridCard}>
-                    <Image source={{ uri: project.image }} style={styles.gridImage} />
+                    <Image source={{ uri: project.frames?.[0]?.imageUrl }} style={styles.gridImage} />
                     <View style={styles.gridInfo}>
                        <Text style={styles.gridTitle} numberOfLines={1}>{project.title}</Text>
                        <Text style={styles.gridDate}>{project.date}</Text>
@@ -115,15 +164,17 @@ export function Home() {
       </View>
       
       <View style={styles.profileHeader}>
-         <View style={styles.avatar}><Text style={styles.avatarText}>U</Text></View>
+         <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{displayName.charAt(0).toUpperCase()}</Text>
+         </View>
          <View>
-            <Text style={styles.profileName}>User Name</Text>
-            <Text style={styles.profileEmail}>user@example.com</Text>
+            <Text style={styles.profileName}>{displayName}</Text>
+            <Text style={styles.profileEmail}>{email}</Text>
          </View>
       </View>
 
       <View style={styles.section}>
-         <TouchableOpacity style={styles.proCard}>
+         <TouchableOpacity style={styles.proCard} onPress={() => handleComingSoon("Cinder Pro")}>
             <View style={{flexDirection:'row', alignItems:'center', gap: 12}}>
                <Crown color="#fff" size={24} />
                <View>
@@ -136,10 +187,10 @@ export function Home() {
       </View>
 
       <View style={styles.menuList}>
-         <MenuItem icon={Settings} label="Settings" />
-         <MenuItem icon={Bell} label="Notifications" />
-         <MenuItem icon={HelpCircle} label="Help & Support" />
-         <MenuItem icon={LogOut} label="Log Out" color="#EF4444" />
+         <MenuItem icon={Settings} label="Settings" onPress={() => handleComingSoon("Settings")} />
+         <MenuItem icon={Bell} label="Notifications" onPress={() => handleComingSoon("Notifications")} />
+         <MenuItem icon={HelpCircle} label="Help & Support" onPress={() => handleComingSoon("Help & Support")} />
+         <MenuItem icon={LogOut} label="Log Out" color="#EF4444" onPress={handleLogout} />
       </View>
     </ScrollView>
   );
@@ -170,8 +221,9 @@ const TabItem = ({ icon: Icon, label, active, onPress }: any) => (
   </TouchableOpacity>
 );
 
-const MenuItem = ({ icon: Icon, label, color = '#374151' }: any) => (
-  <TouchableOpacity style={styles.menuItem}>
+// Added onPress here so the buttons actually fire events!
+const MenuItem = ({ icon: Icon, label, color = '#374151', onPress }: any) => (
+  <TouchableOpacity style={styles.menuItem} onPress={onPress}>
      <View style={{flexDirection:'row', alignItems:'center', gap: 12}}>
         <Icon color={color} size={20} />
         <Text style={{fontSize: 16, color: color}}>{label}</Text>

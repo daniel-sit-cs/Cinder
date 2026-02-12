@@ -8,6 +8,9 @@ import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft, Sparkles, Save, Share2 } from 'lucide-react-native';
 import { generateStory, animateFrame } from '../../api/storyService';
 import { Frame } from '../../types/story';
+import { db, auth } from '../../firebaseConfig';
+import { collection, addDoc } from 'firebase/firestore';
+import * as ImagePicker from 'expo-image-picker';
 
 interface SmartFrame extends Frame {
   videoUrl?: string;
@@ -19,22 +22,35 @@ const STYLES = ['Cinematic', 'Anime', 'Sketch', '3D Render', 'Watercolor'];
 export function Editor() {
   const navigation = useNavigation();
   const [viewState, setViewState] = useState<'input' | 'loading' | 'result'>('input');
-  
   const [prompt, setPrompt] = useState('');
   const [selectedStyle, setSelectedStyle] = useState('Cinematic');
   const [frameCount, setFrameCount] = useState(4);
   const [frames, setFrames] = useState<SmartFrame[]>([]);
+  
+  // ✅ Correctly placed inside the component
+  const [referenceImage, setReferenceImage] = useState<string | null>(null);
 
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+      base64: true, 
+    });
 
- const handleGenerate = async () => {
+    if (!result.canceled) {
+      setReferenceImage(result.assets[0].base64 || null);
+    }
+  };
+
+  const handleGenerate = async () => {
     if (!prompt.trim()) return;
     setViewState('loading');
     setFrames([]);
 
     try {
-      // 🐛 FIX: We no longer mash the style into the prompt!
-      // This stops the TTS from reading "Cinematic style..." out loud.
-      const result = await generateStory(prompt, selectedStyle, frameCount);
+      const result = await generateStory(prompt, selectedStyle, frameCount, referenceImage);
       setFrames(result.frames);
       setViewState('result');
     } catch (error: any) {
@@ -49,7 +65,6 @@ export function Editor() {
     setFrames(newFrames);
 
     try {
-      // Pass the narration text so the AI can read it!
       const videoUrl = await animateFrame(frames[index].imageUrl, frames[index].narration); 
       newFrames[index].videoUrl = videoUrl;
     } catch (error: any) {
@@ -57,6 +72,26 @@ export function Editor() {
     } finally {
       newFrames[index].isAnimating = false;
       setFrames([...newFrames]);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!auth.currentUser || frames.length === 0) return;
+    try {
+      const shortTitle = prompt.split(' ').slice(0, 4).join(' ') + '...';
+      await addDoc(collection(db, 'projects'), {
+        userId: auth.currentUser.uid,
+        title: shortTitle,
+        prompt: prompt,
+        style: selectedStyle,
+        frames: frames,
+        date: new Date().toLocaleDateString(),
+        createdAt: new Date().getTime() 
+      });
+      Alert.alert("Success", "Storyboard saved to Library!");
+      navigation.navigate("Home" as never);
+    } catch (error: any) {
+      Alert.alert("Save Failed", error.message);
     }
   };
 
@@ -72,7 +107,6 @@ export function Editor() {
     );
   }
 
-
   if (viewState === 'input') {
     return (
       <SafeAreaView style={styles.container}>
@@ -82,7 +116,6 @@ export function Editor() {
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
         </View>
-
         <ScrollView contentContainerStyle={styles.content}>
           <Text style={styles.title}>Create Your Story</Text>
           <Text style={styles.subtitle}>Describe your vision and let AI bring it to life</Text>
@@ -97,6 +130,15 @@ export function Editor() {
             textAlignVertical="top"
           />
 
+          <Text style={styles.label}>Character Reference (Optional)</Text>
+          <TouchableOpacity style={styles.uploadBtn} onPress={pickImage}>
+            {referenceImage ? (
+              <Image source={{ uri: `data:image/jpeg;base64,${referenceImage}` }} style={styles.previewThumb} />
+            ) : (
+              <Text style={styles.uploadBtnText}>+ Upload Character Image</Text>
+            )}
+          </TouchableOpacity> 
+
           <Text style={styles.label}>Visual Style</Text>
           <View style={styles.styleRow}>
             {STYLES.map((style) => (
@@ -105,35 +147,24 @@ export function Editor() {
                 onPress={() => setSelectedStyle(style)}
                 style={[styles.styleChip, selectedStyle === style && styles.styleChipActive]}
               >
-                <Text style={[styles.styleText, selectedStyle === style && styles.styleTextActive]}>
-                  {style}
-                </Text>
+                <Text style={[styles.styleText, selectedStyle === style && styles.styleTextActive]}>{style}</Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          {/* Frame Count (1 to 15 Slider/Counter) */}
           <Text style={styles.label}>Frames: {frameCount}</Text>
           <View style={styles.frameCountBox}>
              <View style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', paddingHorizontal: 20}}>
-                <TouchableOpacity 
-                  onPress={() => setFrameCount(Math.max(1, frameCount - 1))}
-                  style={styles.frameNum}
-                >
+                <TouchableOpacity onPress={() => setFrameCount(Math.max(1, frameCount - 1))} style={styles.frameNumBtn}>
                   <Text style={{fontSize: 24, color: '#FF4500', fontWeight: 'bold'}}>-</Text>
                 </TouchableOpacity>
-                
                 <Text style={{fontSize: 24, fontWeight: 'bold', color: '#111'}}>{frameCount}</Text>
-                
-                <TouchableOpacity 
-                  onPress={() => setFrameCount(Math.min(15, frameCount + 1))}
-                  style={styles.frameNum}
-                >
+                <TouchableOpacity onPress={() => setFrameCount(Math.min(15, frameCount + 1))} style={styles.frameNumBtn}>
                   <Text style={{fontSize: 24, color: '#FF4500', fontWeight: 'bold'}}>+</Text>
                 </TouchableOpacity>
              </View>
           </View>
-
+        </ScrollView>
         <View style={styles.footer}>
           <TouchableOpacity 
             style={[styles.mainBtn, !prompt.trim() && styles.disabledBtn]} 
@@ -158,7 +189,6 @@ export function Editor() {
         <Text style={styles.headerTitle}>Your Storyboard</Text>
         <View style={{width: 24}} /> 
       </View>
-
       <FlatList
         data={frames}
         keyExtractor={(item, index) => index.toString()}
@@ -168,7 +198,6 @@ export function Editor() {
             <View style={styles.cardHeader}>
                <View style={styles.frameBadge}><Text style={styles.frameBadgeText}>{index + 1}</Text></View>
                <Text style={styles.frameTitle}>Frame {index + 1}</Text>
-               
                {!item.videoUrl && (
                  <TouchableOpacity 
                    onPress={() => handleAnimateFrame(index)}
@@ -181,7 +210,6 @@ export function Editor() {
                  </TouchableOpacity>
                )}
             </View>
-
             <View style={styles.mediaContainer}>
               {item.videoUrl ? (
                 <Video
@@ -201,17 +229,15 @@ export function Editor() {
                  </View>
               )}
             </View>
-
             <View style={styles.narrationBox}>
               <Text style={styles.narrationText}>{item.narration}</Text>
             </View>
           </View>
         )}
       />
-
       <View style={styles.footer}>
         <View style={styles.actionRow}>
-          <TouchableOpacity style={[styles.mainBtn, {flex: 1}]}>
+          <TouchableOpacity style={[styles.mainBtn, {flex: 1}]} onPress={handleSave}>
              <Save color="#fff" size={20} />
              <Text style={styles.mainBtnText}>Save</Text>
           </TouchableOpacity>
@@ -236,13 +262,12 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: '600', marginBottom: 8, marginTop: 16 },
   textArea: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 14, padding: 16, height: 160, fontSize: 16, textAlignVertical: 'top' },
   styleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  styleChip: { borderWidth: 1, borderColor: '#E5E7EB', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20 },
+  styleChip: { borderWidth: 1, borderColor: '#E5E7EB', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, marginBottom: 8 },
   styleChipActive: { backgroundColor: '#FF4500', borderColor: '#FF4500' },
   styleText: { color: '#374151' },
   styleTextActive: { color: '#fff', fontWeight: '600' },
   frameCountBox: { backgroundColor: '#F9FAFB', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#E5E7EB' },
-  frameNum: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent:'center', borderWidth:1, borderColor:'#ddd' },
-  frameNumActive: { backgroundColor: '#FF4500', borderColor: '#FF4500' },
+  frameNumBtn: { width: 40, height: 40, alignItems: 'center', justifyContent:'center' },
   footer: { padding: 16, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
   mainBtn: { backgroundColor: '#FF4500', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 18, borderRadius: 14, gap: 10 },
   mainBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
@@ -262,5 +287,8 @@ const styles = StyleSheet.create({
   narrationBox: { padding: 16, backgroundColor: '#F9FAFB', borderRadius: 14, borderWidth: 1, borderColor: '#E5E7EB' },
   narrationText: { fontSize: 15, lineHeight: 24, color: '#374151' },
   actionRow: { flexDirection: 'row', gap: 12 },
-  iconBtn: { padding: 18, borderRadius: 14, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }
+  iconBtn: { padding: 18, borderRadius: 14, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
+  uploadBtn: { backgroundColor: '#F3F4F6', height: 100, borderRadius: 14, borderStyle: 'dashed', borderWidth: 2, borderColor: '#D1D5DB', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  uploadBtnText: { color: '#6B7280', fontWeight: '600' },
+  previewThumb: { width: '100%', height: '100%', borderRadius: 12 }
 });

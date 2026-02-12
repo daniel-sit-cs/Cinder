@@ -1,20 +1,18 @@
-// src/api/storyService.ts
+import { auth } from '../firebaseConfig';
 
-// Make sure this points to your computer's IP address if testing on a physical phone,
-// or localhost/10.0.2.2 if using an emulator.
-const API_URL = 'http://localhost:8000'; // Update this if needed!
+const API_URL = 'http://192.168.68.52:8000'; 
 
-// 1. Updated to accept prompt, style, AND frameCount
-export const generateStory = async (prompt: string, style: string, frameCount: number): Promise<any> => {
+export const generateStory = async (prompt: string, style: string, frameCount: number, refImage: string | null): Promise<any> => {
   try {
     const response = await fetch(`${API_URL}/generate-story`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        userId: 'temp-user', // We will update this to Firebase real user later
-        prompt: prompt,
-        style: style,
-        frameCount: frameCount 
+        userId: auth.currentUser?.uid || 'temp',
+        prompt,
+        style,
+        frameCount,
+        referenceImage: refImage 
       }),
     });
 
@@ -30,7 +28,6 @@ export const generateStory = async (prompt: string, style: string, frameCount: n
   }
 };
 
-// 2. Updated to accept imageUrl AND narration (for the TTS Audio)
 export const animateFrame = async (imageUrl: string, narration: string): Promise<string> => {
   try {
     const response = await fetch(`${API_URL}/animate-frame`, {
@@ -48,8 +45,7 @@ export const animateFrame = async (imageUrl: string, narration: string): Promise
     }
 
     const data = await response.json();
-    return `${API_URL}/videos/${data.filename}`;
-
+    return data.videoPath;
   } catch (error) {
     console.error("Animation Failed:", error);
     throw error;
