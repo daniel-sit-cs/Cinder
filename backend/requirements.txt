@@ -1,26 +1,23 @@
-# FastAPI Backend Dependencies
+# FastAPI
 fastapi==0.115.0
 uvicorn[standard]==0.31.0
 pydantic==2.9.0
 python-multipart==0.0.12
+python-dotenv
 
-# NAVIS Model Dependencies
-diffusers==0.27.2
-einops==0.7.0
-numpy==1.23.2
-Pillow==10.1.0
-safetensors==0.4.1
-transformers==4.39.0
-huggingface_hub==0.25.2
-torch==2.2.2
-torchvision==0.17.2
-torchaudio==2.2.2
+# AI — Replicate (image generation via API, no local GPU needed)
+replicate
 
-# Additional dependencies for NAVIS
-accelerate>=0.20.0
-qwen-vl-utils>=0.0.1
+# Video compilation
+moviepy
+Pillow
+numpy>=1.26,<2
 
-# Optional: For video generation (if needed later)
-# TTS>=0.22.0
-# moviepy==2.2.1
-# IPython
+# Text-to-speech
+gTTS
+
+# Firebase
+firebase-admin
+
+# HTTP
+requests

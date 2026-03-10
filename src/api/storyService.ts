@@ -1,6 +1,6 @@
 import { auth } from '../firebaseConfig';
 
-const API_URL = 'http://192.168.68.52:8000'; 
+const API_URL = 'http://192.168.68.54:8000'; 
 
 export const generateStory = async (prompt: string, style: string, frameCount: number, refImage: string | null): Promise<any> => {
   try {

@@ -7,9 +7,10 @@ export interface Frame {
 }
 
 export interface GenerateStoryResponse {
-  status: string;        // 'success' or 'error'
-  storyId: string;       // Unique identifier
+  status: string;
+  storyId: string;
   frames: Frame[];
+  videoUrl?: string;     // Single compiled cinematic video
 }
 
 export interface GenerateStoryRequest {
