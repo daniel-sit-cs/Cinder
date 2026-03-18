@@ -75,9 +75,9 @@
 **Mistake:** Assumed `backend/story-iter` was fully tracked in git and would be present after `git clone`. It's tracked as a single ghost entry (not a proper submodule with `.gitmodules`), so its contents are empty on Colab after cloning.
 **Rule:** Use `NAVIS-main/` instead — it IS fully tracked. Point `PYTHONPATH` to `/content/Cinder/NAVIS-main` and `/content/Cinder/NAVIS-main/ip_adapter` for `ip_adapter` and `sd_embed` imports respectively.
 
-### L016 — `pip install --upgrade` on Colab breaks pinned dependency pairs
-**Mistake:** Used `--upgrade` to force transformers to upgrade, which also upgraded `huggingface_hub` past 0.24. `diffusers==0.27.2` uses `cached_download` which was removed in `huggingface_hub>=0.24`, causing `ImportError: cannot import name 'cached_download'`.
-**Rule:** When upgrading one package on Colab, bump its direct dependents together as a tested set. Fix: upgrade diffusers to `>=0.29.0` which removes the `cached_download` usage, instead of downgrading huggingface_hub.
+### L016 — Fix dependency errors at the source, not by upgrading downstream packages
+**Mistake:** `peft` (latest) needed `EncoderDecoderCache` → upgraded transformers → upgraded huggingface_hub → broke `cached_download` in diffusers → upgraded diffusers → pulled in torchao → needed PyTorch 2.4 (have 2.2.2). Chased errors 4 levels deep.
+**Rule:** Find the package that INTRODUCED the constraint and pin that instead. `EncoderDecoderCache` was added in `peft>=0.14.0` — pinning `peft<0.14.0` fixes the original error without touching anything else. Always ask: "what package added this requirement?" before upgrading dependents.
 
 ### L015 — NAVIS-main/ip_adapter uses `sd_embed` as a sibling package
 **Mistake:** Added `NAVIS-main` to PYTHONPATH but `ip_adapter/ip_adapter.py` imports `from sd_embed.embedding_funcs import ...` — `sd_embed` lives inside `NAVIS-main/ip_adapter/sd_embed/`, so `NAVIS-main/ip_adapter` also needs to be on the path.
