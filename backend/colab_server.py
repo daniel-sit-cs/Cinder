@@ -198,7 +198,7 @@ def generate_images_via_story_iter(
     for i, text in enumerate(prompts):
         print(f"   Frame {i+1}/{frame_count}")
         result = storyadapter.generate(
-            pil_image=character_image if use_character else None,
+            pil_image=[character_image] if use_character else None,
             use_image=use_character,
             prompt=text,
             scale=0.3,
