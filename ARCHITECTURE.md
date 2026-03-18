@@ -1,6 +1,6 @@
 # Cinder — System Architecture
 
-> AI-powered storyboard generator: React Native mobile app + FastAPI backend + Firebase + Replicate AI
+> AI-powered storyboard generator: React Native mobile app + FastAPI backend + Firebase + Story-Iter/NAVIS on Google Colab
 
 ---
 
@@ -10,14 +10,14 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                          CINDER SYSTEM                                  │
 │                                                                         │
-│   ┌──────────────────┐       HTTP        ┌───────────────────────────┐  │
-│   │   MOBILE APP     │  ─────────────►   │    FASTAPI BACKEND        │  │
-│   │  React Native    │  ◄─────────────   │    Python (server.py)     │  │
-│   │  Expo SDK 54     │    JSON response  │    Port 8000              │  │
-│   └────────┬─────────┘                  └─────────────┬─────────────┘  │
-│            │                                          │                 │
-│            │ Firebase SDK                             │ Firebase Admin  │
-│            ▼                                          ▼                 │
+│   ┌──────────────────┐    HTTP (ngrok)    ┌───────────────────────────┐ │
+│   │   MOBILE APP     │  ────────────────► │   FASTAPI BACKEND         │ │
+│   │  React Native    │  ◄────────────────  │   colab_server.py         │ │
+│   │  Expo SDK 54     │   async job poll   │   Google Colab A100       │ │
+│   └────────┬─────────┘                   └─────────────┬─────────────┘ │
+│            │                                           │                │
+│            │ Firebase SDK                              │ Firebase Admin │
+│            ▼                                           ▼                │
 │   ┌──────────────────────────────────────────────────────────────────┐  │
 │   │                       FIREBASE (Google Cloud)                    │  │
 │   │   ┌──────────────┐  ┌──────────────┐  ┌───────────────────────┐ │  │
@@ -25,14 +25,14 @@
 │   │   │  (users)     │  │  (projects)  │  │  (images + videos)    │ │  │
 │   │   └──────────────┘  └──────────────┘  └───────────────────────┘ │  │
 │   └──────────────────────────────────────────────────────────────────┘  │
-│                                          │                              │
-│                                          │ Replicate API               │
-│                                          ▼                              │
+│                                           │                             │
+│                                           │ StoryAdapterXL (local)      │
+│                                           ▼                             │
 │                             ┌────────────────────────┐                 │
-│                             │     REPLICATE AI        │                 │
-│                             │  flux-schnell (images)  │                 │
-│                             │  ip-adapter-sdxl-face   │                 │
-│                             │  (character consistency) │                │
+│                             │   STORY-ITER / NAVIS    │                 │
+│                             │  RealVisXL_V4 base      │                 │
+│                             │  IP-Adapter SDXL        │                 │
+│                             │  4-pass refinement      │                 │
 │                             └────────────────────────┘                 │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -49,11 +49,14 @@
 | **Navigation** | React Navigation | 7.x | Screen routing |
 | **Backend** | FastAPI | 0.115.0 | REST API server |
 | **Backend Language** | Python | 3.12 | Server logic |
+| **AI Model** | Story-Iter / NAVIS (StoryAdapterXL) | — | 4-pass iterative story image generation |
+| **Base Diffusion Model** | RealVisXL V4.0 | — | SDXL-based image generation |
+| **Consistency Module** | IP-Adapter SDXL | — | Cross-frame visual consistency |
+| **GPU** | Google Colab Pro A100 | 40GB VRAM | Model inference |
+| **Tunnel** | ngrok | free tier | Expose Colab server to mobile app |
 | **Database** | Firebase Firestore | SDK 12.8.0 | Project storage |
 | **Auth** | Firebase Auth | SDK 12.8.0 | User accounts |
 | **File Storage** | Firebase Cloud Storage | Admin SDK | Images & videos |
-| **AI Images** | Replicate (Flux Schnell) | API | Story frame generation |
-| **AI Consistency** | Replicate (IP-Adapter SDXL Face) | API | Character consistency |
 | **Text-to-Speech** | gTTS (Google TTS) | Python | Frame narration audio |
 | **Video** | MoviePy | Python | Compile frames into .mp4 |
 | **Icons** | Lucide React Native | 0.563.0 | UI icons |
@@ -75,10 +78,9 @@ Cinder/
 │   ├── firebaseConfig.ts            ← Firebase SDK init (auth, db, storage)
 │   │
 │   ├── api/
-│   │   └── storyService.ts          ← HTTP calls to FastAPI backend
+│   │   └── storyService.ts          ← Async job client (POST + poll /job/{id})
 │   │
 │   ├── navigation/
-│   │   ├── index.tsx                ← Alt nav config (createStaticNavigation)
 │   │   └── screens/
 │   │       ├── WelcomeScreen.tsx    ← Landing page (animated hero)
 │   │       ├── Login.tsx            ← Sign in form
@@ -94,16 +96,21 @@ Cinder/
 │       └── story.ts                 ← TypeScript interfaces (Frame, Response)
 │
 ├── backend/                         ← Python backend
-│   ├── server.py                    ← FastAPI app (all routes + AI pipeline)
-│   ├── requirements.txt             ← Python dependencies
-│   ├── firebase-key.json            ← Firebase service account (secret)
-│   ├── .env                         ← REPLICATE_API_TOKEN (secret)
+│   ├── colab_server.py              ← FastAPI app (Story-Iter pipeline) ← PRODUCTION
+│   ├── server.py                    ← Legacy local server (Replicate API)
+│   ├── cinder_colab.ipynb           ← Colab setup notebook (run this)
+│   ├── requirements_colab.txt       ← Python dependencies for Colab
+│   ├── firebase-key.json            ← Firebase service account (secret, not committed)
+│   ├── .env                         ← Secrets (not committed)
 │   └── generated_videos/            ← Temp output (images, audio, mp4s)
 │
+├── NAVIS-main/                      ← Story-Iter model source
+│   ├── ip_adapter/                  ← StoryAdapterXL + IP-Adapter implementation
+│   ├── story_vis.py                 ← Standalone image generation script
+│   ├── story_gen.py                 ← Narration generation (Qwen2.5-VL)
+│   └── video_gen.py                 ← Video compilation script
+│
 └── assets/                          ← App icons & splash screen
-    ├── icon.png
-    ├── adaptive-icon.png
-    └── splash-icon.png
 ```
 
 ---
@@ -116,7 +123,6 @@ Cinder/
 App.tsx (Auth Gate)
     │
     ├── [NOT LOGGED IN]
-    │       │
     │       ▼
     │   WelcomeScreen ──► Login ──────────────┐
     │       │                                  │
@@ -125,7 +131,6 @@ App.tsx (Auth Gate)
     │                            Firebase Auth ▼
     │
     └── [LOGGED IN]
-            │
             ▼
           Home  ◄────────────────────────────────┐
             │                                    │
@@ -138,54 +143,73 @@ App.tsx (Auth Gate)
 
 | Screen | Responsibility |
 |--------|---------------|
-| `WelcomeScreen` | Animated hero, entry point for auth. Navigates to Login/Signup. |
-| `Login` | Firebase `signInWithEmailAndPassword`. Focus-glow inputs, press animation. |
-| `Signup` | Firebase `createUserWithEmailAndPassword`. Password strength bar, perk list. |
-| `Home` | Fetches user's projects from Firestore. Masonry grid. Delete + open projects. |
-| `Editor` | Collects prompt/style/frames/reference image → calls backend → displays results. |
-| `ProjectDetail` | Read-only view of a saved project's frames and narrations. |
+| `WelcomeScreen` | Animated hero, entry point for auth |
+| `Login` | Firebase `signInWithEmailAndPassword` |
+| `Signup` | Firebase `createUserWithEmailAndPassword` |
+| `Home` | Fetches user's projects from Firestore. Masonry grid. |
+| `Editor` | Collects prompt/style/frames/reference image → calls backend → displays results |
+| `ProjectDetail` | Read-only view of a saved project's frames and narrations |
 
-### 4.3 State Flow in Editor
+### 4.3 Async Generation Flow in Editor
 
 ```
-[INPUT VIEW]                [LOADING VIEW]              [RESULT VIEW]
-  prompt ──────────►  POST /generate-story  ──────►  frames[]
-  style                  (Replicate AI)               storyVideoUrl
-  frameCount             (MoviePy video)
-  referenceImage?        (Firebase upload)
-                              │
-                              ▼
-                         Firestore save
-                        (handleSave)
+[INPUT VIEW]           [LOADING VIEW]              [RESULT VIEW]
+  prompt ──────►  POST /generate-story ──────►  frames[]
+  style           ← returns jobId instantly       storyVideoUrl
+  frameCount
+  referenceImage?      ↓ poll every 5s
+                  GET /job/{jobId}
+                  until status === "done"
+                       ↓
+                  Firebase Storage URLs
+                       ↓
+                  Firestore save (handleSave)
 ```
 
 ---
 
 ## 5. Backend Architecture
 
-### 5.1 AI Generation Pipeline
+### 5.1 Story-Iter / NAVIS Pipeline
 
 ```
 POST /generate-story
         │
-        ▼
+        ▼  (returns jobId immediately, runs in background thread)
 ┌───────────────────────────────────────────────────────┐
-│  Step 1: IMAGE GENERATION (per frame)                  │
+│  Pass 0: INITIAL GENERATION (per frame)                │
 │                                                        │
-│  referenceImage?                                       │
-│     YES → Replicate: lucataco/ip-adapter-sdxl-face     │
-│            (IP-Adapter conditions each frame on        │
-│             the same face → character consistency)     │
+│  referenceImage provided?                              │
+│    YES → pil_image=[character_image], use_image=True   │
+│           scale=0.3, 20 steps                          │
+│    NO  → pil_image=None, use_image=False               │
+│           pure text-to-image generation                │
 │                                                        │
-│     NO  → Replicate: black-forest-labs/flux-schnell    │
-│            (fast, prompt-only generation)              │
-│                                                        │
-│  Repeat for each of the N frames (STORY_BEATS)         │
+│  Output: thumbnails[] (256×256 PIL Images)             │
 └──────────────────┬────────────────────────────────────┘
-                   │ N image files saved locally
                    ▼
 ┌───────────────────────────────────────────────────────┐
-│  Step 2: VIDEO COMPILATION (MoviePy)                   │
+│  Passes 1–3: ITERATIVE REFINEMENT                      │
+│                                                        │
+│  Each pass:                                            │
+│    pil_image = thumbnails (all previous frames)        │
+│    use_image = True                                    │
+│    scale: 0.30 → 0.40 → 0.50 (increasing influence)   │
+│                                                        │
+│  This is Story-Iter's GRCA cross-attention:            │
+│  each frame attends to ALL other frames for            │
+│  semantic consistency across the storyboard            │
+└──────────────────┬────────────────────────────────────┘
+                   ▼
+┌───────────────────────────────────────────────────────┐
+│  Final Pass: FULL-RESOLUTION OUTPUT                    │
+│                                                        │
+│  pil_image = refined thumbnails                        │
+│  Full resolution PNG saved to generated_videos/        │
+└──────────────────┬────────────────────────────────────┘
+                   ▼
+┌───────────────────────────────────────────────────────┐
+│  VIDEO COMPILATION (MoviePy)                           │
 │                                                        │
 │  For each frame:                                       │
 │    1. gTTS: narration text → .mp3 audio               │
@@ -195,56 +219,56 @@ POST /generate-story
 │                                                        │
 │  concatenate_videoclips(all_clips) → story.mp4        │
 └──────────────────┬────────────────────────────────────┘
-                   │ 1 .mp4 file
                    ▼
 ┌───────────────────────────────────────────────────────┐
-│  Step 3: FIREBASE UPLOAD                               │
+│  FIREBASE UPLOAD                                       │
 │                                                        │
-│  video → Firebase Storage: videos/story_{id}.mp4      │
+│  video  → Firebase Storage: videos/story_{id}.mp4     │
 │  images → Firebase Storage: images/frame_{id}.png     │
 │                                                        │
 │  Returns: signed URLs (7-day expiry)                  │
 └──────────────────┬────────────────────────────────────┘
-                   │
                    ▼
-         GenerateStoryResponse {
-           status, storyId,
-           frames[{ index, narration, imageUrl }],
-           videoUrl
+         jobs[jobId] = {
+           status: "done",
+           storyId, frames[], videoUrl
          }
+         (client polling GET /job/{jobId} receives this)
 ```
 
 ### 5.2 Story Beats System
 
-The backend uses 15 pre-defined `STORY_BEATS` — a cinematic 3-act narrative arc built into `server.py`. Each beat provides a scene template and narration template. The AI prompt for each frame is assembled as:
-
-```
-"{style} style, highly detailed, cinematic lighting,
- {scene_beat}, featuring {prompt} as the main character"
-```
+The backend uses 15 pre-defined `STORY_BEATS` — a cinematic 3-act narrative arc. Each beat provides a scene template and narration template that gets formatted with the user's prompt.
 
 ### 5.3 API Reference
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/generate-story` | Full pipeline: images → video → Firebase → response |
-| `GET` | `/videos/{filename}` | Serve local generated video files (static mount) |
+| `GET`  | `/health` | Server health check |
+| `POST` | `/generate-story` | Start generation job, returns `jobId` immediately |
+| `GET`  | `/job/{jobId}` | Poll job status: `processing` / `done` / `error` |
+| `GET`  | `/videos/{filename}` | Serve local generated video files |
 
-**Request body** (`/generate-story`):
+**POST `/generate-story` request:**
 ```json
 {
   "userId":         "string  — Firebase UID",
   "prompt":         "string  — Story description",
-  "style":          "string? — e.g. 'Cinematic', 'Anime'",
+  "style":          "string? — e.g. 'Cinematic', 'Comic', 'Storybook'",
   "frameCount":     "int     — 1 to 15",
-  "referenceImage": "string? — base64 JPEG (enables IP-Adapter)"
+  "referenceImage": "string? — base64 JPEG (optional character seeding)"
 }
 ```
 
-**Response**:
+**POST `/generate-story` response (immediate):**
+```json
+{ "jobId": "abc123", "status": "processing" }
+```
+
+**GET `/job/{jobId}` response (when done):**
 ```json
 {
-  "status":   "success",
+  "status":   "done",
   "storyId":  "userId_hex",
   "frames": [
     { "index": 0, "narration": "string", "imageUrl": "signed-url" }
@@ -277,15 +301,9 @@ projects/
             ]
 ```
 
-### Collection: `users` (managed by Firebase Auth)
-
-Firebase Authentication stores email, UID, and creation date automatically. No manual user document needed.
-
 ---
 
-## 7. Character Consistency — IP-Adapter
-
-The professor requirement for **Story-Iter / IP-Adapter** is satisfied as follows:
+## 7. Character Consistency — Story-Iter / IP-Adapter
 
 ```
 User uploads reference photo (optional)
@@ -296,24 +314,19 @@ User uploads reference photo (optional)
                                   { referenceImage: "base64..." }
                                           │
                                           ▼
-                              generate_images_via_replicate()
+                              _run_generation() [background thread]
                                           │
-                                  use_ip_adapter = True
+                                  Pass 0: pil_image=[character_image]
                                           │
-                                          ▼
-                            Replicate: lucataco/ip-adapter-sdxl-face
-                            ┌─────────────────────────────────┐
-                            │  prompt:  scene description      │
-                            │  image:   data:image/jpeg;base64 │  ← same for ALL frames
-                            │  scale:   0.6                    │
-                            │  steps:   30                     │
-                            └─────────────────────────────────┘
+                                  Passes 1-3: use story thumbnails
+                                  as cross-frame visual context
+                                  (Story-Iter GRCA cross-attention)
                                           │
-                                  Character face is embedded
-                                  into every generated frame
-                                  → visual consistency across
-                                    the entire storyboard
+                                  Result: stylistically consistent
+                                  frames across the storyboard
 ```
+
+Note: `StoryAdapterXL` uses IP-Adapter SDXL (not FaceID). The reference image influences style and visual features rather than exact face replication. Strong character consistency is achieved through the iterative refinement passes.
 
 ---
 
@@ -322,15 +335,14 @@ User uploads reference photo (optional)
 All UI tokens are defined in `src/theme/tokens.ts`:
 
 ```
-Background layers:        #0D0D0F  →  #1A1A2E  →  #1E1E2A
-Primary accent:           #7C5CFC  (electric violet)
-Secondary accent:         #4ECDC4  (cyan)
-Text primary:             #F0F0F5
-Text secondary:           #8888A0
-Border:                   rgba(255,255,255,0.06)
-Success:                  #00D68F
-Error:                    #FF6B6B
-Warning / amber:          #F5A623
+Background layers:   #0D0D0F  →  #1A1A2E  →  #1E1E2A
+Primary accent:      #7C5CFC  (electric violet)
+Secondary accent:    #4ECDC4  (cyan)
+Text primary:        #F0F0F5
+Text secondary:      #8888A0
+Border:              rgba(255,255,255,0.06)
+Success:             #00D68F
+Error:               #FF6B6B
 ```
 
 ---
@@ -357,17 +369,19 @@ Editor Screen
  │  4. Taps "Generate Storyboard"
  ▼
 storyService.ts
- │  POST http://{local-ip}:8000/generate-story
+ │  POST https://{ngrok-url}/generate-story
+ │  ← receives jobId immediately
+ │  polls GET /job/{jobId} every 5s
  │
  ▼
-FastAPI server.py
- │  → Replicate API: generate N images
- │  → gTTS: generate N audio clips
+colab_server.py (Google Colab A100)
+ │  → Story-Iter: 4-pass image generation
+ │  → gTTS: N audio clips
  │  → MoviePy: compile → 1 .mp4
  │  → Firebase Storage: upload images + video
- │  → Return signed URLs
+ │  → jobs[jobId] = { status: "done", ... }
  │
- │  5. Response received (30s – 2min)
+ │  5. Poll returns status "done" (~3-10 min)
  ▼
 Editor Result View
  │  Shows: full video player + frame grid + narrations
@@ -387,20 +401,16 @@ Home (masonry grid, tap card → ProjectDetail)
 
 ### Frontend (`src/api/storyService.ts`)
 ```typescript
-const API_URL = 'http://{local-machine-ip}:8000';
-// Must be updated to match the machine running server.py
+const API_URL = 'https://{ngrok-url}'; // from Colab Cell 5 output
 ```
 
 ### Backend (`backend/.env`)
 ```
-REPLICATE_API_TOKEN=r8_...   # Replicate API key
+HF_TOKEN=hf_...   # HuggingFace token (for model downloads if needed)
 ```
 
 ### Backend (`backend/firebase-key.json`)
-```json
-// Firebase service account credentials
-// Used by Firebase Admin SDK to upload files to Cloud Storage
-```
+Firebase service account credentials — used by Firebase Admin SDK to upload files to Cloud Storage.
 
 ### Firebase Project
 ```
@@ -408,3 +418,10 @@ Project ID:      cinder-9012f
 Auth Domain:     cinder-9012f.firebaseapp.com
 Storage Bucket:  cinder-9012f.firebasestorage.app
 ```
+
+### Colab Setup
+- Runtime: GPU → A100 (40GB VRAM)
+- Model checkpoints: downloaded via Cell 3 (~10 GB total)
+  - RealVisXL_V4.0 (7 GB) — base diffusion model
+  - IP-Adapter SDXL weights (500 MB)
+  - CLIP image encoder (1.7 GB)
