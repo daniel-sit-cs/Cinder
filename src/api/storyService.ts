@@ -3,7 +3,7 @@ import { auth } from '../firebaseConfig';
 // ⚠️  UPDATE THIS when switching environments:
 //   Local (Replicate server.py):  'http://192.168.68.54:8000'
 //   Colab (Story-Iter):           paste the ngrok URL from cinder_colab.ipynb Cell 5
-const API_URL = 'http://192.168.68.54:8000';
+const API_URL = 'https://eruciform-evalyn-nonintrospectively.ngrok-free.dev';
 
 export const generateStory = async (prompt: string, style: string, frameCount: number, refImage: string | null): Promise<any> => {
   try {
