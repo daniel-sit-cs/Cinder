@@ -17,8 +17,9 @@ import io
 import uuid
 import base64
 import requests
+import threading
 import numpy as np
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import timedelta
 from dotenv import load_dotenv
 from PIL import Image
@@ -320,17 +321,26 @@ os.makedirs("generated_videos", exist_ok=True)
 app.mount("/videos", StaticFiles(directory="generated_videos"), name="videos")
 
 
+# In-memory job store: jobId -> {"status": "processing"|"done"|"error", ...}
+jobs: Dict[str, Any] = {}
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "engine": "story-iter", "device": DEVICE}
 
 
-@app.post("/generate-story", response_model=GenerateStoryResponse)
-async def generate_story(request: GenerateStoryRequest):
+@app.get("/job/{job_id}")
+def get_job(job_id: str):
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return jobs[job_id]
+
+
+def _run_generation(job_id: str, request: GenerateStoryRequest):
     try:
         story_id = f"{request.userId}_{uuid.uuid4().hex[:8]}"
 
-        # Step 1: Generate images via Story-Iter
         frame_tuples = generate_images_via_story_iter(
             request.prompt,
             request.frameCount,
@@ -338,34 +348,42 @@ async def generate_story(request: GenerateStoryRequest):
             request.referenceImage,
         )
 
-        # Step 2: Compile all frames into one cinematic video
         video_name = f"story_{uuid.uuid4().hex[:8]}.mp4"
         video_path = os.path.join("generated_videos", video_name)
         success = create_full_story_video(frame_tuples, video_path)
         if not success:
             raise Exception("Video compilation failed")
 
-        # Step 3: Upload video to Firebase
         video_url = upload_to_firebase(video_path, f"videos/{video_name}")
         print(f"✅ Story video ready: {video_url}")
 
-        # Step 4: Upload individual frame images to Firebase
         frames = []
         for i, (img_path, narration) in enumerate(frame_tuples):
             img_filename = os.path.basename(img_path)
             img_url = upload_to_firebase(img_path, f"images/{img_filename}")
-            frames.append(Frame(index=i, narration=narration, imageUrl=img_url))
+            frames.append({"index": i, "narration": narration, "imageUrl": img_url})
 
-        return GenerateStoryResponse(
-            status="success",
-            storyId=story_id,
-            frames=frames,
-            videoUrl=video_url,
-        )
+        jobs[job_id] = {
+            "status": "done",
+            "storyId": story_id,
+            "frames": frames,
+            "videoUrl": video_url,
+        }
+        print(f"✅ Job {job_id} complete.")
 
     except Exception as e:
-        print(f"❌ Error in /generate-story: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"❌ Job {job_id} failed: {e}")
+        jobs[job_id] = {"status": "error", "detail": str(e)}
+
+
+@app.post("/generate-story")
+async def generate_story(request: GenerateStoryRequest):
+    job_id = uuid.uuid4().hex[:12]
+    jobs[job_id] = {"status": "processing"}
+    thread = threading.Thread(target=_run_generation, args=(job_id, request), daemon=True)
+    thread.start()
+    print(f"🚀 Job {job_id} started in background.")
+    return {"jobId": job_id, "status": "processing"}
 
 
 if __name__ == "__main__":
