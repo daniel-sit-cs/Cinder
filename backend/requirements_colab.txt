@@ -1,0 +1,34 @@
+# ============================================================
+# Cinder — Colab Requirements (Story-Iter/NAVIS Edition)
+# Install with: pip install -r requirements_colab.txt
+# ============================================================
+
+# Story-Iter / NAVIS (must match story-iter/requirements.txt versions)
+torch==2.2.2
+torchvision==0.17.2
+torchaudio==2.2.2
+diffusers==0.27.2
+transformers==4.39.0
+safetensors==0.4.1
+huggingface_hub==0.25.2
+einops==0.7.0
+
+# FastAPI
+fastapi==0.115.0
+uvicorn[standard]==0.31.0
+pydantic==2.9.0
+python-multipart==0.0.12
+python-dotenv
+
+# Video + TTS
+moviepy
+Pillow
+numpy>=1.26,<2
+gTTS
+
+# Firebase
+firebase-admin
+
+# HTTP + ngrok tunnel
+requests
+pyngrok
