@@ -23,9 +23,13 @@ ckpt/
 # Generated outputs
 outputs/
 generated_stories/
+generated_videos/
 temp/
 *.mp4
 *.wav
+*.mp3
+*.png
+demo*.jpg
 
 # IDE
 .vscode/
