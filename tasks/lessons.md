@@ -62,3 +62,23 @@
 ### L011 — Check what the professor actually requires before building
 **Mistake:** Implemented IP-Adapter via Replicate API without confirming whether the professor requires Story-Iter/NAVIS to actually run locally.
 **Rule:** When academic requirements are ambiguous, surface the ambiguity early and draft a clarifying message to the professor before over-engineering.
+
+### L012 — `sys.path.insert` does NOT propagate to subprocesses
+**Mistake:** Added `sys.path.insert(0, ...)` in the Colab notebook cell, then launched uvicorn via `subprocess.Popen` expecting it to inherit the path. It doesn't — subprocess spawns a fresh Python interpreter.
+**Rule:** When launching a server via subprocess, pass `PYTHONPATH` explicitly in the `env` dict: `env = os.environ.copy(); env['PYTHONPATH'] = '...:' + env.get('PYTHONPATH', '')` and pass `env=env` to `Popen`.
+
+### L013 — Colab UI cells don't reload from disk after `git pull`
+**Mistake:** Pushed a fix to the notebook, told the user to `git pull` in Cell 1, then expected Cell 5 to have the fix. It didn't — Colab loads cells into memory when the notebook is opened; pulling changes the file on disk but not the live UI cells.
+**Rule:** After a `git pull` that changes notebook cells, either close+reopen the notebook OR manually apply the fix directly in the Colab cell editor.
+
+### L014 — `backend/story-iter` is an untracked nested repo, not a proper submodule
+**Mistake:** Assumed `backend/story-iter` was fully tracked in git and would be present after `git clone`. It's tracked as a single ghost entry (not a proper submodule with `.gitmodules`), so its contents are empty on Colab after cloning.
+**Rule:** Use `NAVIS-main/` instead — it IS fully tracked. Point `PYTHONPATH` to `/content/Cinder/NAVIS-main` and `/content/Cinder/NAVIS-main/ip_adapter` for `ip_adapter` and `sd_embed` imports respectively.
+
+### L016 — `pip install --upgrade` on Colab breaks pinned dependency pairs
+**Mistake:** Used `--upgrade` to force transformers to upgrade, which also upgraded `huggingface_hub` past 0.24. `diffusers==0.27.2` uses `cached_download` which was removed in `huggingface_hub>=0.24`, causing `ImportError: cannot import name 'cached_download'`.
+**Rule:** When upgrading one package on Colab, bump its direct dependents together as a tested set. Fix: upgrade diffusers to `>=0.29.0` which removes the `cached_download` usage, instead of downgrading huggingface_hub.
+
+### L015 — NAVIS-main/ip_adapter uses `sd_embed` as a sibling package
+**Mistake:** Added `NAVIS-main` to PYTHONPATH but `ip_adapter/ip_adapter.py` imports `from sd_embed.embedding_funcs import ...` — `sd_embed` lives inside `NAVIS-main/ip_adapter/sd_embed/`, so `NAVIS-main/ip_adapter` also needs to be on the path.
+**Rule:** For NAVIS imports, always add BOTH paths: `NAVIS-main` (for `ip_adapter`) AND `NAVIS-main/ip_adapter` (for `sd_embed`).
